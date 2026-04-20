@@ -1,13 +1,13 @@
 import aiomysql
 from datetime import datetime
-
+import os
 
 DB_CONFIG = {
-    "host": "sql7.freesqldatabase.com",
-    "port": 3306,
-    "user": "sql7823806",
-    "password": "zywYVaTHnB",
-    "db": "sql7823806",
+    "host": os.getenv("DB_HOST"),
+    "port": os.getenv("DB_PORT"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "db": os.getenv("DB_NAME"),
 }
 
 async def get_connection():

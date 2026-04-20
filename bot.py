@@ -1,13 +1,21 @@
 import asyncio
+import random
+import string
+import os
+
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-
 from db import create_wallet, get_user_wallets, get_history_wallet, add_row, add_invites, get_connection, calculate_debts, build_debts
-from config import API_TOKEN
-import random
-import string
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_TOKEN = os.getenv("API_TOKEN")
+
+if not API_TOKEN:
+    raise ValueError("API_TOKEN not set")
 
 def generate_code():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -21,6 +29,7 @@ class WalletState(StatesGroup):
 class ExpenseState(StatesGroup):
     waiting_for_name = State()
     waiting_for_sum = State()
+
 # --- START ---
 @dp.message(F.text == "/start")
 async def start(message: Message):
