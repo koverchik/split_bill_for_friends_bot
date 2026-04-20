@@ -1,10 +1,13 @@
 import aiomysql
-from datetime import datetime
 import os
+
+from datetime import datetime
+from dotenv import load_dotenv
+load_dotenv()
 
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
-    "port": os.getenv("DB_PORT"),
+    "port": int(os.getenv("DB_PORT", 3306)),
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
     "db": os.getenv("DB_NAME"),
@@ -108,7 +111,7 @@ async def add_invites(wallet_id, code):
 
     await cursor.execute(
         "DELETE FROM invites WHERE wallet_id = %s",
-        (wallet_id)
+        (wallet_id,)
     )
 
     await cursor.execute(
