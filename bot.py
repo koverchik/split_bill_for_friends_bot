@@ -1,6 +1,6 @@
 import asyncio
 import os
-
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot, Dispatcher, F
@@ -87,7 +87,7 @@ async def select_wallet(callback: CallbackQuery):
     wallet_id = int(callback.data.split(":")[1])
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Добавить расход", callback_data=f"wallet:add:{wallet_id}")],
+        [InlineKeyboardButton(text="➕ Добавить трату", callback_data=f"wallet:add:{wallet_id}")],
         [InlineKeyboardButton(text="📜 История", callback_data=f"wallet:view:{wallet_id}")],
         [InlineKeyboardButton(text="💰 Баланс", callback_data=f"wallet:balance:{wallet_id}")],
         [InlineKeyboardButton(text="👥 Пригласить", callback_data=f"wallet:invite:{wallet_id}")]
@@ -134,23 +134,30 @@ async def get_sum(message: Message, state: FSMContext):
     await state.clear()
 
 
-# --- HISTORY ---
+ROWS_PER_PAGE = 10
+
 @dp.callback_query(F.data.startswith("wallet:view:"))
 async def view_wallet(callback: CallbackQuery):
-    wallet_id = int(callback.data.split(":")[2])
+    parts = callback.data.split(":")
+    wallet_id = int(parts[2])
+    page = int(parts[3]) if len(parts) > 3 else 0
+
     rows = await get_history_wallet(wallet_id)
 
     if not rows:
         await callback.message.answer("❌ Нет данных")
         return
 
-    # 👉 заголовок
+    start = page * ROWS_PER_PAGE
+    end = start + ROWS_PER_PAGE
+    page_rows = rows[start:end]
+
     text = "📅 Дата       🛒 Название               💰 Сумма\n"
     text += "-" * 50 + "\n"
 
     total = 0
 
-    for dt, name, summ in rows:
+    for dt, name, summ in page_rows:
         date_str = dt.strftime("%d/%m/%y")
         name = name[:25]
 
@@ -158,12 +165,36 @@ async def view_wallet(callback: CallbackQuery):
         total += float(summ)
 
     text += "-" * 50 + "\n"
-    text += f"Итого: {total:>37.2f}"
+    text += f"Страница: {page + 1}"
 
-    await callback.message.answer(
-        f"<pre>{text}</pre>",
-        parse_mode="HTML"
-    )
+    buttons = []
+
+    if page > 0:
+        buttons.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=f"wallet:view:{wallet_id}:{page - 1}"
+            )
+        )
+
+    if end < len(rows):
+        buttons.append(
+            InlineKeyboardButton(
+                text="➡️ Вперед",
+                callback_data=f"wallet:view:{wallet_id}:{page + 1}"
+            )
+        )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[buttons] if buttons else [])
+
+    try:
+        await callback.message.edit_text(
+            f"<pre>{text}</pre>",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+    except TelegramBadRequest:
+        await callback.answer("Ты уже на этой странице 😉")
 
 @dp.callback_query(F.data.startswith("wallet:balance:"))
 async def show_debts(callback: CallbackQuery):
