@@ -16,7 +16,7 @@ DB_CONFIG = {
 async def get_connection():
     return await aiomysql.connect(**DB_CONFIG)
 
-async def create_wallet(user_id, name):
+async def create_wallet(user_id, username, name):
     conn = await get_connection()
     cursor = await conn.cursor()
 
@@ -27,8 +27,8 @@ async def create_wallet(user_id, name):
     wallet_id = cursor.lastrowid
 
     await cursor.execute(
-        "INSERT INTO wallets_users (wallet_id, user_id, accesses) VALUES (%s, %s, %s)",
-        (wallet_id, user_id, "owner")
+        "INSERT INTO wallets_users (wallet_id, user_id, user_name, accesses) VALUES (%s, %s, %s, %s)",
+        (wallet_id, user_id, username, "owner")
     )
 
     await conn.commit()

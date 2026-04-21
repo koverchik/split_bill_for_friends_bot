@@ -1,6 +1,4 @@
 import asyncio
-import random
-import string
 import os
 
 from aiogram.fsm.state import StatesGroup, State
@@ -8,6 +6,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
+
+from utils import get_user_name, generate_code
 
 from db import (
     create_wallet,
@@ -28,12 +28,6 @@ if not API_TOKEN:
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
-
-
-# --- UTILS ---
-def generate_code():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-
 
 # --- STATES ---
 class WalletState(StatesGroup):
@@ -66,10 +60,11 @@ async def create_wallet_start(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(WalletState.waiting_for_name)
 async def save_wallet(message: Message, state: FSMContext):
-    await create_wallet(message.from_user.id, message.text)
+    username = get_user_name(message)
+
+    await create_wallet(message.from_user.id, username, message.text)
     await message.answer(f"✅ Кошелек '{message.text}' создан!")
     await state.clear()
-
 
 # --- SHOW WALLETS ---
 @dp.callback_query(F.data == "wallet:existing")
@@ -150,18 +145,24 @@ async def view_wallet(callback: CallbackQuery):
         await callback.message.answer("❌ Нет данных")
         return
 
-    text = ""
+    text = "📅 Дата       🛒 Название      💰 Сумма\n"
+    text += "---------------------------------\n"
+
     total = 0
 
     for row in rows:
         dt, name, summ = row[0], row[1], row[2]
-        text += f"{dt.strftime('%d/%m/%y')} {name} {summ:.2f}\n"
+
+        text += f"{dt.strftime('%d/%m/%y')}   {name:<15} {summ:>7.2f}\n"
         total += float(summ)
 
-    text += f"\n💰 Итого: {total:.2f}"
+    text += "---------------------------------\n"
+    text += f"Итого:                    {total:>7.2f}"
 
-    await callback.message.answer(text)
-
+    await callback.message.answer(
+        f"<pre>{text}</pre>",
+        parse_mode="HTML"
+    )
 
 # --- BALANCE ---
 @dp.callback_query(F.data.startswith("wallet:balance:"))
@@ -175,12 +176,34 @@ async def show_debts(callback: CallbackQuery):
         await callback.message.answer("💚 Долгов нет")
         return
 
-    text = "💸 Долги:\n\n"
+    conn = await get_connection()
+    cursor = await conn.cursor()
 
-    for d, c, amount in debts:
-        text += f"{d} → {c}: {amount:.2f}\n"
+    await cursor.execute(
+        "SELECT user_id, user_name FROM wallets_users WHERE wallet_id=%s",
+        (wallet_id,)
+    )
 
-    await callback.message.answer(text)
+    users = {row[0]: row[1] for row in await cursor.fetchall()}
+
+    await cursor.close()
+    conn.close()
+
+    text = "Кто должен        Кому            Сумма\n"
+    text += "------------------------------------------\n"
+
+    for debtor_id, creditor_id, amount in debts:
+        debtor = users.get(debtor_id, str(debtor_id))[:15]
+        creditor = users.get(creditor_id, str(creditor_id))[:15]
+
+        text += f"{debtor:<16}{creditor:<16}{amount:>8.2f}\n"
+
+    text += "------------------------------------------"
+
+    await callback.message.answer(
+        f"<pre>{text}</pre>",
+        parse_mode="HTML"
+    )
 
 
 # --- INVITE ---
@@ -220,9 +243,12 @@ async def join_wallet(message: Message):
 
     wallet_id = int(result[0])
 
+    username = get_user_name(message)
+
     await cursor.execute(
-        "INSERT IGNORE INTO wallets_users (wallet_id, user_id, accesses) VALUES (%s, %s, %s)",
-        (wallet_id, message.from_user.id, "member")
+        "INSERT IGNORE INTO wallets_users (wallet_id, user_id, user_name, accesses) "
+        "VALUES (%s, %s, %s, %s)",
+        (wallet_id, message.from_user.id, username, "member")
     )
 
     await conn.commit()
