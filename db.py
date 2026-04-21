@@ -59,6 +59,26 @@ async def get_user_wallets(user_id):
 
     return rows
 
+async def get_summ_by_user_wallet(wallet_id):
+    conn = await get_connection()
+    cursor = await conn.cursor()
+
+    await cursor.execute(
+        """
+        SELECT SUM(summ), user_id 
+        FROM rows WHERE wallet_id=%s 
+        GROUP BY user_id
+        """,
+        (wallet_id,)
+    )
+
+    rows = await cursor.fetchall()
+
+    await cursor.close()
+    conn.close()
+
+    return rows
+
 async def get_history_wallet(wallet_id):
     conn = await get_connection()
     cursor = await conn.cursor()
@@ -125,70 +145,25 @@ async def add_invites(wallet_id, code):
 
     return True
 
-async def calculate_debts(wallet_id):
+async def get_summ_spending_by_user(wallet_id):
     conn = await get_connection()
     cursor = await conn.cursor()
 
-    # участники
-    await cursor.execute(
-        "SELECT user_id FROM wallets_users WHERE wallet_id=%s",
-        (wallet_id,)
-    )
-    users = [u[0] for u in await cursor.fetchall()]
-
-    if not users:
-        return []
-
-    # расходы
     await cursor.execute(
         """
-        SELECT user_id, SUM(summ)
-        FROM rows
-        WHERE wallet_id=%s
-        GROUP BY user_id
+        SELECT wu.user_id, wu.user_name, COALESCE(SUM(r.summ), 0)
+        FROM wallets_users wu
+        LEFT JOIN rows r 
+            ON wu.user_id = r.user_id AND wu.wallet_id = r.wallet_id
+        WHERE wu.wallet_id = %s
+        GROUP BY wu.user_id, wu.user_name
         """,
         (wallet_id,)
     )
 
-    spent = {row[0]: float(row[1]) for row in await cursor.fetchall()}
+    rows = await cursor.fetchall()
 
     await cursor.close()
     conn.close()
 
-    # общий баланс
-    total = sum(spent.get(u, 0) for u in users)
-    per_person = total / len(users)
-
-    # считаем баланс
-    balances = {}
-    for u in users:
-        balances[u] = spent.get(u, 0) - per_person
-
-    return balances
-
-def build_debts(balances):
-    creditors = []
-    debtors = []
-
-    for user, balance in balances.items():
-        if balance > 0:
-            creditors.append([user, balance])
-        elif balance < 0:
-            debtors.append([user, -balance])
-
-    result = []
-
-    for d_user, d_amount in debtors:
-        for c_user, c_amount in creditors:
-
-            if d_amount == 0:
-                break
-
-            pay = min(d_amount, c_amount)
-
-            result.append((d_user, c_user, pay))
-
-            d_amount -= pay
-            c_amount -= pay
-
-    return result
+    return rows

@@ -16,8 +16,7 @@ from db import (
     add_row,
     add_invites,
     get_connection,
-    calculate_debts,
-    build_debts
+    get_summ_spending_by_user
 )
 
 load_dotenv()
@@ -145,56 +144,59 @@ async def view_wallet(callback: CallbackQuery):
         await callback.message.answer("❌ Нет данных")
         return
 
-    text = "📅 Дата       🛒 Название      💰 Сумма\n"
-    text += "---------------------------------\n"
+    # 👉 заголовок
+    text = "📅 Дата       🛒 Название               💰 Сумма\n"
+    text += "-" * 50 + "\n"
 
     total = 0
 
-    for row in rows:
-        dt, name, summ = row[0], row[1], row[2]
+    for dt, name, summ in rows:
+        date_str = dt.strftime("%d/%m/%y")
+        name = name[:25]
 
-        text += f"{dt.strftime('%d/%m/%y')}   {name:<15} {summ:>7.2f}\n"
+        text += f"{date_str:<10} {name:<25} {summ:>10.2f}\n"
         total += float(summ)
 
-    text += "---------------------------------\n"
-    text += f"Итого:                    {total:>7.2f}"
+    text += "-" * 50 + "\n"
+    text += f"Итого: {total:>37.2f}"
 
     await callback.message.answer(
         f"<pre>{text}</pre>",
         parse_mode="HTML"
     )
 
-# --- BALANCE ---
 @dp.callback_query(F.data.startswith("wallet:balance:"))
 async def show_debts(callback: CallbackQuery):
     wallet_id = int(callback.data.split(":")[2])
 
-    balances = await calculate_debts(wallet_id)
-    debts = build_debts(balances)
+    balances = await get_summ_spending_by_user(wallet_id)
 
-    if not debts:
-        await callback.message.answer("💚 Долгов нет")
+    target_id = callback.from_user.id
+
+    target_user = next((u for u in balances if u[0] == target_id), None)
+
+    if not target_user:
+        await callback.message.answer("❌ Пользователь не найден в кошельке")
         return
 
-    conn = await get_connection()
-    cursor = await conn.cursor()
+    others = [u for u in balances if u[0] != target_id]
 
-    await cursor.execute(
-        "SELECT user_id, user_name FROM wallets_users WHERE wallet_id=%s",
-        (wallet_id,)
-    )
-
-    users = {row[0]: row[1] for row in await cursor.fetchall()}
-
-    await cursor.close()
-    conn.close()
+    _, target_name, target_sum = target_user
 
     text = "Кто должен        Кому            Сумма\n"
     text += "------------------------------------------\n"
 
-    for debtor_id, creditor_id, amount in debts:
-        debtor = users.get(debtor_id, str(debtor_id))[:15]
-        creditor = users.get(creditor_id, str(creditor_id))[:15]
+    for user_id, name, summ in others:
+        diff = target_sum / len(balances) - summ / len(balances)
+
+        if diff > 0:
+            debtor = name
+            creditor = target_name
+            amount = diff
+        else:
+            debtor = target_name
+            creditor = name
+            amount = abs(diff)
 
         text += f"{debtor:<16}{creditor:<16}{amount:>8.2f}\n"
 
@@ -204,7 +206,6 @@ async def show_debts(callback: CallbackQuery):
         f"<pre>{text}</pre>",
         parse_mode="HTML"
     )
-
 
 # --- INVITE ---
 @dp.callback_query(F.data.startswith("wallet:invite:"))
