@@ -85,10 +85,12 @@ async def get_history_wallet(wallet_id):
 
     await cursor.execute(
         """
-        SELECT datetime, name, summ
-        FROM rows
-        WHERE wallet_id = %s
-        ORDER BY datetime DESC
+        SELECT r.id, r.datetime, r.name, r.summ, r.user_id, wu.user_name
+        FROM rows r
+        JOIN wallets_users wu 
+          ON r.wallet_id = wu.wallet_id AND r.user_id = wu.user_id
+        WHERE r.wallet_id = %s
+        ORDER BY r.datetime DESC
         """,
         (wallet_id,)
     )

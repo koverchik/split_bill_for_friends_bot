@@ -152,19 +152,22 @@ async def view_wallet(callback: CallbackQuery):
     end = start + ROWS_PER_PAGE
     page_rows = rows[start:end]
 
-    text = "📅 Дата       🛒 Название               💰 Сумма\n"
-    text += "-" * 50 + "\n"
+    text = "📅 Дата       👤 Кто        🛒 Название           💰 Сумма\n"
+    text += "-" * 65 + "\n"
 
     total = 0
 
-    for dt, name, summ in page_rows:
-        date_str = dt.strftime("%d/%m/%y")
-        name = name[:25]
+    for row in page_rows:
+        row_id, dt, name, summ, user_id, user_name = row
 
-        text += f"{date_str:<10} {name:<25} {summ:>10.2f}\n"
+        date_str = dt.strftime("%d/%m/%y")
+        name = name[:20]
+        user_name = (user_name or "???")[:10]
+
+        text += f"{date_str:<10} {user_name:<10} {name:<20} {summ:>10.2f}\n"
         total += float(summ)
 
-    text += "-" * 50 + "\n"
+    text += "-" * 65 + "\n"
     text += f"Страница: {page + 1}"
 
     buttons = []
