@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
-
+from aiogram.filters import Command
 from utils import get_user_name, generate_code
 
 from db import (
@@ -39,7 +39,7 @@ class ExpenseState(StatesGroup):
 
 
 # --- START ---
-@dp.message(F.text == "/start")
+@dp.message(Command("start"))
 async def start(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -252,8 +252,7 @@ async def invite(callback: CallbackQuery):
     )
 
 
-# --- JOIN ---
-@dp.message(F.text.startswith("/join"))
+@dp.message(Command("join"))
 async def join_wallet(message: Message):
     parts = message.text.split()
 
@@ -262,15 +261,21 @@ async def join_wallet(message: Message):
         return
 
     code = parts[1].upper()
+    user_id = message.from_user.id
 
     conn = await get_connection()
     cursor = await conn.cursor()
 
-    await cursor.execute("SELECT wallet_id FROM invites WHERE code=%s", (code,))
+    await cursor.execute(
+        "SELECT wallet_id FROM invites WHERE code=%s",
+        (code,)
+    )
     result = await cursor.fetchone()
 
     if not result:
-        await message.answer("❌ Код неверный")
+        await message.answer("❌ Неверный код")
+        await cursor.close()
+        conn.close()
         return
 
     wallet_id = int(result[0])
@@ -278,9 +283,11 @@ async def join_wallet(message: Message):
     username = get_user_name(message)
 
     await cursor.execute(
-        "INSERT IGNORE INTO wallets_users (wallet_id, user_id, user_name, accesses) "
-        "VALUES (%s, %s, %s, %s)",
-        (wallet_id, message.from_user.id, username, "member")
+        """
+        INSERT IGNORE INTO wallets_users (wallet_id, user_id, user_name, accesses)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (wallet_id, user_id, username, "member")
     )
 
     await conn.commit()
@@ -288,7 +295,7 @@ async def join_wallet(message: Message):
     await cursor.close()
     conn.close()
 
-    await message.answer("✅ Вы подключены!")
+    await message.answer("✅ Ты присоединился!")
 
 
 async def main():
