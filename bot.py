@@ -152,8 +152,8 @@ async def view_wallet(callback: CallbackQuery):
     end = start + ROWS_PER_PAGE
     page_rows = rows[start:end]
 
-    text = "📅 Дата       👤 Кто        🛒 Название           💰 Сумма\n"
-    text += "-" * 65 + "\n"
+    text = "📅 Дата   👤 Кто        🛒 Название          💰 Сумма\n"
+    text += "-" * 60 + "\n"
 
     total = 0
 
@@ -167,7 +167,7 @@ async def view_wallet(callback: CallbackQuery):
         text += f"{date_str:<10} {user_name:<10} {name:<20} {summ:>10.2f}\n"
         total += float(summ)
 
-    text += "-" * 65 + "\n"
+    text += "-" * 60 + "\n"
     text += f"Страница: {page + 1}"
 
     buttons = []
